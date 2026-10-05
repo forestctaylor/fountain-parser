@@ -121,6 +121,16 @@ class Scene:
     elements: List[ScreenplayElement] = field(default_factory=list)
 
     @property
+    def actions(self) -> List[Action]:
+        """Extracts all action description blocks within this scene."""
+        return [elem for elem in self.elements if isinstance(elem, Action)]
+
+    @property
+    def action_text(self) -> str:
+        """Returns all action blocks joined into a single narrative description."""
+        return "\n\n".join(action.text for action in self.actions)
+
+    @property
     def dialogue_blocks(self) -> List[DialogueBlock]:
         """Extracts dialogue blocks within this scene."""
         blocks: List[DialogueBlock] = []
