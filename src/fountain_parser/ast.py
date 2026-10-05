@@ -27,6 +27,7 @@ class SceneHeading:
 @dataclass(frozen=True)
 class Action:
     text: str
+    is_centered: bool = False
     element_type: ElementType = ElementType.ACTION
 
 
@@ -111,6 +112,11 @@ class DialogueBlock:
         """Returns the joined spoken dialogue text, excluding parentheticals."""
         return " ".join(line.text for line in self.lines if isinstance(line, Dialogue))
 
+    @property
+    def parentheticals(self) -> List[Parenthetical]:
+        """Returns all parentheticals within this speech block."""
+        return [l for l in self.lines if isinstance(l, Parenthetical)]
+
 
 @dataclass
 class Scene:
@@ -120,19 +126,61 @@ class Scene:
     heading: Optional[SceneHeading] = None
     elements: List[ScreenplayElement] = field(default_factory=list)
 
+    # --- Element-Specific Filter Properties ---
+
     @property
     def actions(self) -> List[Action]:
-        """Extracts all action description blocks within this scene."""
+        """All action blocks in this scene."""
         return [elem for elem in self.elements if isinstance(elem, Action)]
 
     @property
     def action_text(self) -> str:
-        """Returns all action blocks joined into a single narrative description."""
+        """All action blocks joined into a single narrative description."""
         return "\n\n".join(action.text for action in self.actions)
 
     @property
+    def characters(self) -> List[Character]:
+        """All character cues in this scene."""
+        return [elem for elem in self.elements if isinstance(elem, Character)]
+
+    @property
+    def character_names(self) -> List[str]:
+        """Unique character names speaking in this scene, in order of appearance."""
+        return list(dict.fromkeys(c.name for c in self.characters))
+
+    @property
+    def dialogues(self) -> List[Dialogue]:
+        """All individual dialogue lines in this scene."""
+        return [elem for elem in self.elements if isinstance(elem, Dialogue)]
+
+    @property
+    def parentheticals(self) -> List[Parenthetical]:
+        """All parentheticals in this scene."""
+        return [elem for elem in self.elements if isinstance(elem, Parenthetical)]
+
+    @property
+    def transitions(self) -> List[Transition]:
+        """All transitions in this scene."""
+        return [elem for elem in self.elements if isinstance(elem, Transition)]
+
+    @property
+    def synopses(self) -> List[Synopsis]:
+        """All synopses in this scene."""
+        return [elem for elem in self.elements if isinstance(elem, Synopsis)]
+
+    @property
+    def boneyards(self) -> List[Boneyard]:
+        """All comments/boneyards in this scene."""
+        return [elem for elem in self.elements if isinstance(elem, Boneyard)]
+
+    @property
+    def page_breaks(self) -> List[PageBreak]:
+        """All page breaks within this scene."""
+        return [elem for elem in self.elements if isinstance(elem, PageBreak)]
+
+    @property
     def dialogue_blocks(self) -> List[DialogueBlock]:
-        """Extracts dialogue blocks within this scene."""
+        """Grouped speech blocks (Character + Parenthetical + Dialogue) within this scene."""
         blocks: List[DialogueBlock] = []
         current_block: Optional[DialogueBlock] = None
 
@@ -184,3 +232,30 @@ class Screenplay:
             scene_list.append(current_scene)
 
         return scene_list
+
+    # --- Script-Wide Convenience Properties ---
+
+    @property
+    def character_names(self) -> List[str]:
+        """All unique character names in the entire screenplay, in order of appearance."""
+        return list(dict.fromkeys(
+            elem.name for elem in self.elements if isinstance(elem, Character)
+        ))
+
+    @property
+    def actions(self) -> List[Action]:
+        """All action blocks in the screenplay."""
+        return [elem for elem in self.elements if isinstance(elem, Action)]
+
+    @property
+    def dialogue_blocks(self) -> List[DialogueBlock]:
+        """All dialogue blocks across all scenes in the screenplay."""
+        all_blocks: List[DialogueBlock] = []
+        for s in self.scenes:
+            all_blocks.extend(s.dialogue_blocks)
+        return all_blocks
+
+    @property
+    def transitions(self) -> List[Transition]:
+        """All transitions in the screenplay."""
+        return [elem for elem in self.elements if isinstance(elem, Transition)]

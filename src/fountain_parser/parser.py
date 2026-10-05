@@ -172,6 +172,12 @@ class FountainParser:
                 i += 1
                 continue
 
+            # Centered Text (> ... <)
+            if stripped.startswith(">") and stripped.endswith("<"):
+                elements.append(Action(text=stripped[1:-1].strip(), is_centered=True))
+                i += 1
+                continue
+
             # Page Break (=== or ====)
             if RE_PAGE_BREAK.match(stripped):
                 elements.append(PageBreak())
@@ -243,12 +249,20 @@ class FountainParser:
             if is_forced_char:
                 is_potential_char = True
             elif self._is_character_line(stripped):
-                # Must be followed by dialogue or parenthetical on next non-empty line
-                next_non_empty = self._find_next_non_empty(raw_lines, i + 1)
-                if next_non_empty is not None:
-                    next_str = raw_lines[next_non_empty].strip()
-                    if next_str and not RE_PAGE_BREAK.match(next_str):
-                        is_potential_char = True
+                # Fountain Spec Invariant: A character cue MUST be followed immediately
+                # on the VERY NEXT LINE (no blank lines) by dialogue or parentheticals.
+                if i + 1 < total_lines:
+                    next_line_stripped = raw_lines[i + 1].strip()
+                    if next_line_stripped and not RE_PAGE_BREAK.match(next_line_stripped):
+                        # Ensure next line is not another heading, transition, etc.
+                        clean_next = next_line_stripped.strip("*_").strip()
+                        if (
+                            not clean_next.endswith("TO:")
+                            and clean_next not in ("FADE IN:", "FADE OUT.", "FADE TO BLACK.")
+                            and not RE_SCENE_PREFIX.match(next_line_stripped)
+                            and not next_line_stripped.startswith(".")
+                        ):
+                            is_potential_char = True
 
             if is_potential_char:
                 char_text = stripped[1:].strip() if is_forced_char else stripped
@@ -303,6 +317,7 @@ class FountainParser:
                     or next_stripped.startswith("@")
                     or next_stripped.startswith("#")
                     or next_stripped.startswith("=")
+                    or (next_stripped.startswith(">") and next_stripped.endswith("<"))
                     or RE_SCENE_PREFIX.match(next_stripped)
                     or self._is_character_line(next_stripped)
                     or RE_PAGE_BREAK.match(next_stripped)
@@ -322,8 +337,8 @@ class FountainParser:
         if not line:
             return False
         clean = line.strip("*_").strip()
-        # Characters cannot end in colons (that's a transition)
-        if clean.endswith(":"):
+        # Characters cannot start with > or end in colons/angles
+        if clean.startswith(">") or clean.endswith("<") or clean.endswith(":"):
             return False
         if clean.endswith("^"):
             clean = clean[:-1].strip()
@@ -342,12 +357,6 @@ class FountainParser:
             and not clean.endswith(".")
             and not bool(RE_SCENE_PREFIX.match(clean))
         )
-
-    def _find_next_non_empty(self, lines: List[str], start_idx: int) -> Optional[int]:
-        for idx in range(start_idx, len(lines)):
-            if lines[idx].strip():
-                return idx
-        return None
 
 
 def parse(text: str) -> Screenplay:
