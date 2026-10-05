@@ -114,8 +114,10 @@ class DialogueBlock:
 
 @dataclass
 class Scene:
-    """Convenience structure grouping elements under a scene heading."""
-    heading: SceneHeading
+    """Convenience structure grouping elements under a scene heading.
+    heading is None if elements occur before the first scene heading.
+    """
+    heading: Optional[SceneHeading] = None
     elements: List[ScreenplayElement] = field(default_factory=list)
 
     @property
@@ -147,11 +149,14 @@ class Scene:
 class Screenplay:
     """The root AST node representing a complete parsed Fountain screenplay."""
     title_page: Dict[str, List[str]] = field(default_factory=dict)
+    epigraph: Optional[str] = None
     elements: List[ScreenplayElement] = field(default_factory=list)
 
     @property
     def scenes(self) -> List[Scene]:
-        """Groups screenplay elements by SceneHeading, creating a PROLOGUE if scenes begin before a heading."""
+        """Groups screenplay elements by SceneHeading.
+        If elements precede the first scene heading, they are placed in a Scene with heading=None.
+        """
         scene_list: List[Scene] = []
         current_scene: Optional[Scene] = None
 
@@ -162,7 +167,7 @@ class Screenplay:
                 current_scene = Scene(heading=elem)
             else:
                 if current_scene is None:
-                    current_scene = Scene(heading=SceneHeading(text="PROLOGUE"))
+                    current_scene = Scene(heading=None)
                 current_scene.elements.append(elem)
 
         if current_scene:

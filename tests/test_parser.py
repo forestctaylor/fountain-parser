@@ -58,6 +58,7 @@ You should be.
         scene = scenes[0]
 
         # Check Heading
+        self.assertIsNotNone(scene.heading)
         self.assertEqual(scene.heading.text, "INT. DINER - NIGHT")
         self.assertEqual(scene.heading.scene_number, "1")
 
@@ -115,17 +116,26 @@ Attack at dawn!
         self.assertEqual(screenplay.title_page.get("Author"), ["John August"])
         self.assertEqual(screenplay.title_page.get("Credit"), ["written by"])
 
+        # Epigraph / Front Matter
+        self.assertEqual(
+            screenplay.epigraph,
+            "This is a Southern story, full of lies and fabrications, but truer for their inclusion.",
+        )
+
         # Scenes & Total Elements
         scenes = screenplay.scenes
         self.assertGreater(len(scenes), 150)
         self.assertGreater(len(screenplay.elements), 2000)
 
-        # Check First Heading
+        # First Scene (opening sequence before first explicit scene heading)
         first_scene = scenes[0]
-        self.assertEqual(first_scene.heading.text, "PROLOGUE")
+        self.assertIsNone(first_scene.heading)
+        self.assertIsInstance(first_scene.elements[0], Transition)
+        self.assertEqual(first_scene.elements[0].text, "**FADE IN:**")
 
         # Second Scene (Will's Bedroom)
         bedroom_scene = scenes[1]
+        self.assertIsNotNone(bedroom_scene.heading)
         self.assertEqual(bedroom_scene.heading.text, "INT.  WILL'S BEDROOM - NIGHT (1973)")
         self.assertEqual(len(bedroom_scene.dialogue_blocks), 1)
         self.assertEqual(bedroom_scene.dialogue_blocks[0].character.name, "EDWARD")

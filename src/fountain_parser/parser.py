@@ -39,32 +39,37 @@ class FountainParser:
         # Normalize newlines
         normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-        # 1. Parse Title Page (if present at the top)
-        title_page, script_text = self._extract_title_page(normalized_text)
+        # 1. Parse Title Page and Front Matter (epigraph)
+        title_page, epigraph, script_text = self._extract_title_page_and_epigraph(normalized_text)
 
-        # 2. Extract and handle elements
+        # 2. Extract and handle body elements
         elements = self._parse_elements(script_text)
 
-        return Screenplay(title_page=title_page, elements=elements)
+        return Screenplay(title_page=title_page, epigraph=epigraph, elements=elements)
 
-    def _extract_title_page(self, text: str) -> Tuple[Dict[str, List[str]], str]:
-        """Extracts title page key-values according to Fountain spec."""
+    def _extract_title_page_and_epigraph(
+        self, text: str
+    ) -> Tuple[Dict[str, List[str]], Optional[str], str]:
+        """Extracts title page key-values and optional front-matter epigraph."""
         lines = text.split("\n")
         title_page: Dict[str, List[str]] = {}
         current_key: Optional[str] = None
-        index = 0
+        idx = 0
+        total_lines = len(lines)
 
-        # Title page must start on the first non-empty line
-        for i, line in enumerate(lines):
+        # Phase 1: Extract Title Page Key-Value pairs
+        while idx < total_lines:
+            line = lines[idx]
             stripped = line.strip()
+
             if not stripped:
                 if current_key is not None:
-                    # An empty line after title page fields terminates the title page
-                    index = i + 1
+                    # An empty line after keys marks end of the key-value block
+                    idx += 1
                     break
+                idx += 1
                 continue
 
-            # Title page keys: e.g. "Title: The Big Movie" or "Draft date:"
             if ":" in line and not line.startswith("..") and not stripped.isupper():
                 parts = line.split(":", 1)
                 potential_key = parts[0].strip().title()
@@ -74,17 +79,45 @@ class FountainParser:
                 if val:
                     title_page[current_key].append(val)
             elif current_key and (line.startswith("   ") or line.startswith("\t")):
-                # Indented continuation line for current title page key
+                # Indented continuation line
                 title_page[current_key].append(stripped)
             else:
-                # First non-title line encountered before an empty line
+                # First non-title line encountered
                 if not title_page:
-                    return {}, text
-                index = i
+                    return {}, None, text
                 break
+            idx += 1
 
-        remaining_text = "\n".join(lines[index:])
-        return title_page, remaining_text
+        if not title_page:
+            return {}, None, text
+
+        # Phase 2: Check for Front-Matter / Epigraph before the first page break
+        epigraph_lines: List[str] = []
+        epigraph_found = False
+        remaining_idx = idx
+
+        for i in range(idx, total_lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if RE_PAGE_BREAK.match(stripped):
+                # Page break marks end of title/front-matter sequence
+                epigraph_found = bool(epigraph_lines)
+                remaining_idx = i + 1
+                break
+            elif stripped.startswith(".") or RE_SCENE_PREFIX.match(stripped) or stripped.startswith(">") or stripped.endswith("TO:"):
+                # Hit actual screenplay elements before any page break
+                break
+            elif stripped:
+                epigraph_lines.append(stripped)
+
+        epigraph = "\n".join(epigraph_lines) if epigraph_found else None
+        if not epigraph_found:
+            # No epigraph with page-break; script body continues from after title keys
+            remaining_idx = idx
+
+        remaining_text = "\n".join(lines[remaining_idx:])
+        return title_page, epigraph, remaining_text
 
     def _parse_elements(self, text: str) -> List[ScreenplayElement]:
         """Tokenizes script text into typed ScreenplayElement instances."""
