@@ -33,9 +33,14 @@ class Action:
 @dataclass(frozen=True)
 class Character:
     name: str
-    extension: Optional[str] = None  # e.g., "V.O.", "O.S."
-    is_dual: bool = False             # Dual dialogue indicated by trailing ^
+    extensions: List[str] = field(default_factory=list)  # e.g., ["V.O.", "CONT'D"]
+    is_dual: bool = False                                 # Dual dialogue indicated by trailing ^
     element_type: ElementType = ElementType.CHARACTER
+
+    @property
+    def extension(self) -> Optional[str]:
+        """Convenience property returning all extensions joined, or None if empty."""
+        return " ".join(self.extensions) if self.extensions else None
 
 
 @dataclass(frozen=True)
@@ -146,7 +151,7 @@ class Screenplay:
 
     @property
     def scenes(self) -> List[Scene]:
-        """Groups screenplay elements by SceneHeading."""
+        """Groups screenplay elements by SceneHeading, creating a PROLOGUE if scenes begin before a heading."""
         scene_list: List[Scene] = []
         current_scene: Optional[Scene] = None
 
@@ -155,7 +160,9 @@ class Screenplay:
                 if current_scene:
                     scene_list.append(current_scene)
                 current_scene = Scene(heading=elem)
-            elif current_scene is not None:
+            else:
+                if current_scene is None:
+                    current_scene = Scene(heading=SceneHeading(text="PROLOGUE"))
                 current_scene.elements.append(elem)
 
         if current_scene:

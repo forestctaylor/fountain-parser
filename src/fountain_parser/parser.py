@@ -42,7 +42,7 @@ class FountainParser:
         # 1. Parse Title Page (if present at the top)
         title_page, script_text = self._extract_title_page(normalized_text)
 
-        # 2. Extract and handle boneyard comments (/* ... */)
+        # 2. Extract and handle elements
         elements = self._parse_elements(script_text)
 
         return Screenplay(title_page=title_page, elements=elements)
@@ -119,7 +119,6 @@ class FountainParser:
                 before, _, b_part = line.partition("/*")
                 if before.strip():
                     raw_lines[i] = before
-                    # Process before part in next iteration, queue b_part
                     in_boneyard = True
                     boneyard_buffer.append(b_part)
                     continue
@@ -140,13 +139,13 @@ class FountainParser:
                 i += 1
                 continue
 
-            # Page Break
+            # Page Break (=== or ====)
             if RE_PAGE_BREAK.match(stripped):
                 elements.append(PageBreak())
                 i += 1
                 continue
 
-            # Section Heading
+            # Section Heading (# Act I)
             sec_match = RE_SECTION.match(stripped)
             if sec_match:
                 level = len(sec_match.group(1))
@@ -155,7 +154,7 @@ class FountainParser:
                 i += 1
                 continue
 
-            # Synopsis
+            # Synopsis (= Synopsis text)
             syn_match = RE_SYNOPSIS.match(stripped)
             if syn_match:
                 elements.append(Synopsis(text=syn_match.group(1).strip()))
@@ -184,10 +183,15 @@ class FountainParser:
                 i += 1
                 continue
 
-            # Transitions (Forced: '> ...' or Unforced: '... TO:')
+            # Transitions (Forced: '> ...' or Unforced: '... TO:', 'FADE IN:', 'FADE OUT.')
+            clean_for_trans = stripped.strip("*_").strip()
             is_forced_transition = stripped.startswith(">") and not stripped.endswith("<")
             is_unforced_transition = (
-                stripped.isupper() and bool(RE_TRANSITION_SUFFIX.search(stripped))
+                clean_for_trans.isupper()
+                and (
+                    bool(RE_TRANSITION_SUFFIX.search(clean_for_trans))
+                    or clean_for_trans in ("FADE IN:", "FADE OUT.", "FADE TO BLACK.")
+                )
             )
 
             if is_forced_transition:
@@ -219,15 +223,19 @@ class FountainParser:
                 if is_dual:
                     char_text = char_text[:-1].strip()
 
-                # Extract character extension (V.O., O.S.)
-                ext_match = RE_CHARACTER_EXTENSION.search(char_text)
-                extension = None
-                if ext_match:
-                    extension = ext_match.group(1).strip("()")
-                    char_text = char_text[: ext_match.start()].strip()
+                # Extract all character extensions (V.O., O.S., CONT'D, etc.)
+                extensions: List[str] = []
+                while True:
+                    ext_match = RE_CHARACTER_EXTENSION.search(char_text)
+                    if ext_match:
+                        extensions.append(ext_match.group(1).strip("()"))
+                        char_text = char_text[: ext_match.start()].strip()
+                    else:
+                        break
+                extensions.reverse()
 
                 elements.append(
-                    Character(name=char_text, extension=extension, is_dual=is_dual)
+                    Character(name=char_text, extensions=extensions, is_dual=is_dual)
                 )
                 i += 1
 
@@ -256,6 +264,7 @@ class FountainParser:
                     i += 1
                     break
                 # If next line starts a new element type, break action block
+                clean_next_trans = next_stripped.strip("*_").strip()
                 if (
                     next_stripped.startswith(".")
                     or next_stripped.startswith("@")
@@ -264,6 +273,8 @@ class FountainParser:
                     or RE_SCENE_PREFIX.match(next_stripped)
                     or self._is_character_line(next_stripped)
                     or RE_PAGE_BREAK.match(next_stripped)
+                    or clean_next_trans in ("FADE IN:", "FADE OUT.", "FADE TO BLACK.")
+                    or bool(RE_TRANSITION_SUFFIX.search(clean_next_trans))
                 ):
                     break
                 action_lines.append(next_stripped)
@@ -277,20 +288,26 @@ class FountainParser:
         """Determines if a line conforms to Fountain unforced character cue syntax."""
         if not line:
             return False
-        # Strip trailing dual-dialogue indicator and extensions for uppercase check
-        test_str = line
-        if test_str.endswith("^"):
-            test_str = test_str[:-1].strip()
-        ext_match = RE_CHARACTER_EXTENSION.search(test_str)
-        if ext_match:
-            test_str = test_str[: ext_match.start()].strip()
+        clean = line.strip("*_").strip()
+        # Characters cannot end in colons (that's a transition)
+        if clean.endswith(":"):
+            return False
+        if clean.endswith("^"):
+            clean = clean[:-1].strip()
 
-        # Characters are uppercase, not ending in punctuation (except extensions)
+        # Strip all trailing parentheticals
+        while True:
+            ext_match = RE_CHARACTER_EXTENSION.search(clean)
+            if ext_match:
+                clean = clean[: ext_match.start()].strip()
+            else:
+                break
+
         return (
-            test_str.isupper()
-            and not test_str.endswith(":")
-            and not test_str.endswith(".")
-            and not bool(RE_SCENE_PREFIX.match(test_str))
+            bool(clean)
+            and clean.isupper()
+            and not clean.endswith(".")
+            and not bool(RE_SCENE_PREFIX.match(clean))
         )
 
     def _find_next_non_empty(self, lines: List[str], start_idx: int) -> Optional[int]:

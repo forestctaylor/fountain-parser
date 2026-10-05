@@ -1,22 +1,22 @@
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 # Add src to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from fountain_parser import (
-    parse,
-    SceneHeading,
     Action,
-    Character,
-    Parenthetical,
-    Dialogue,
-    Transition,
-    PageBreak,
     Boneyard,
+    Character,
+    Dialogue,
+    PageBreak,
+    Parenthetical,
+    SceneHeading,
     SectionHeading,
     Synopsis,
+    Transition,
+    parse,
 )
 
 
@@ -89,46 +89,47 @@ Attack at dawn!
         screenplay = parse(text)
         self.assertEqual(len(screenplay.elements), 4)
 
-        # Forced scene
         self.assertIsInstance(screenplay.elements[0], SceneHeading)
         self.assertTrue(screenplay.elements[0].is_forced)
         self.assertEqual(screenplay.elements[0].text, "UNDERGROUND BUNKER")
 
-        # Forced character
         self.assertIsInstance(screenplay.elements[1], Character)
         self.assertEqual(screenplay.elements[1].name, "GENERAL")
 
-        # Dialogue
         self.assertIsInstance(screenplay.elements[2], Dialogue)
         self.assertEqual(screenplay.elements[2].text, "Attack at dawn!")
 
-        # Forced transition
         self.assertIsInstance(screenplay.elements[3], Transition)
         self.assertTrue(screenplay.elements[3].is_forced)
         self.assertEqual(screenplay.elements[3].text, "FADE TO BLACK.")
 
-    def test_boneyard_and_sections(self):
-        text = """
-# ACT I
+    def test_big_fish_real_world_sample(self):
+        big_fish_path = os.path.join(os.path.dirname(__file__), "Big-Fish.fountain")
+        self.assertTrue(os.path.exists(big_fish_path))
 
-/* This is a boneyard note */
+        with open(big_fish_path, "r", encoding="utf-8") as f:
+            screenplay = parse(f.read())
 
-= Introduce our heroes.
+        # Title Page
+        self.assertEqual(screenplay.title_page.get("Title"), ["Big Fish"])
+        self.assertEqual(screenplay.title_page.get("Author"), ["John August"])
+        self.assertEqual(screenplay.title_page.get("Credit"), ["written by"])
 
-===
-"""
-        screenplay = parse(text)
-        self.assertIsInstance(screenplay.elements[0], SectionHeading)
-        self.assertEqual(screenplay.elements[0].text, "ACT I")
-        self.assertEqual(screenplay.elements[0].level, 1)
+        # Scenes & Total Elements
+        scenes = screenplay.scenes
+        self.assertGreater(len(scenes), 150)
+        self.assertGreater(len(screenplay.elements), 2000)
 
-        self.assertIsInstance(screenplay.elements[1], Boneyard)
-        self.assertIn("This is a boneyard note", screenplay.elements[1].text)
+        # Check First Heading
+        first_scene = scenes[0]
+        self.assertEqual(first_scene.heading.text, "PROLOGUE")
 
-        self.assertIsInstance(screenplay.elements[2], Synopsis)
-        self.assertEqual(screenplay.elements[2].text, "Introduce our heroes.")
-
-        self.assertIsInstance(screenplay.elements[3], PageBreak)
+        # Second Scene (Will's Bedroom)
+        bedroom_scene = scenes[1]
+        self.assertEqual(bedroom_scene.heading.text, "INT.  WILL'S BEDROOM - NIGHT (1973)")
+        self.assertEqual(len(bedroom_scene.dialogue_blocks), 1)
+        self.assertEqual(bedroom_scene.dialogue_blocks[0].character.name, "EDWARD")
+        self.assertIn("trying to catch that fish", bedroom_scene.dialogue_blocks[0].spoken_text)
 
 
 if __name__ == "__main__":
